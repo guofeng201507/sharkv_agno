@@ -49,6 +49,7 @@ class OpenAIChat(Model):
 
     # Request parameters
     store: Optional[bool] = None
+    reasoning_effort: Optional[bool] = None
     metadata: Optional[Dict[str, Any]] = None
     frequency_penalty: Optional[float] = None
     logit_bias: Optional[Any] = None
@@ -131,7 +132,9 @@ class OpenAIChat(Model):
         client_params: Dict[str, Any] = self._get_client_params()
         if self.http_client is not None:
             client_params["http_client"] = self.http_client
-        return OpenAIClient(**client_params)
+
+        self.client = OpenAIClient(**client_params)
+        return self.client
 
     def get_async_client(self) -> AsyncOpenAIClient:
         """
@@ -166,6 +169,7 @@ class OpenAIChat(Model):
         request_params.update(
             {
                 "store": self.store,
+                "reasoning_effort": self.reasoning_effort,
                 "frequency_penalty": self.frequency_penalty,
                 "logit_bias": self.logit_bias,
                 "logprobs": self.logprobs,
