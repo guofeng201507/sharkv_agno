@@ -10,7 +10,7 @@ from agno.memory.db.sqlite import SqliteMemoryDb
 from agno.memory.manager import MemoryManager
 from agno.memory.summarizer import MemorySummarizer
 from agno.models.google import Gemini
-from agno.storage.agent.sqlite import SqliteAgentStorage
+from agno.storage.sqlite import SqliteStorage
 from agno.tools.duckduckgo import DuckDuckGoTools
 
 
@@ -35,7 +35,7 @@ def test_basic():
 
     assert response.content is not None
     assert len(response.messages) == 3
-    assert [m.role for m in response.messages] == ["system", "user", "model"]
+    assert [m.role for m in response.messages] == ["system", "user", "assistant"]
 
     _assert_metrics(response)
 
@@ -69,7 +69,7 @@ async def test_async_basic():
 
     assert response.content is not None
     assert len(response.messages) == 3
-    assert [m.role for m in response.messages] == ["system", "user", "model"]
+    assert [m.role for m in response.messages] == ["system", "user", "assistant"]
     _assert_metrics(response)
 
 
@@ -127,7 +127,7 @@ def test_with_memory():
 
     # Verify memories were created
     assert len(agent.memory.messages) == 5
-    assert [m.role for m in agent.memory.messages] == ["system", "user", "model", "user", "model"]
+    assert [m.role for m in agent.memory.messages] == ["system", "user", "assistant", "user", "assistant"]
 
     # Test metrics structure and types
     _assert_metrics(response2)
@@ -145,7 +145,7 @@ def test_persistent_memory():
         instructions=[
             "You can search the internet with DuckDuckGo.",
         ],
-        storage=SqliteAgentStorage(table_name="chat_agent", db_file="tmp/agent_storage.db"),
+        storage=SqliteStorage(table_name="chat_agent", db_file="tmp/agent_storage.db"),
         # Adds the current date and time to the instructions
         add_datetime_to_instructions=True,
         # Adds the history of the conversation to the messages
@@ -218,7 +218,7 @@ def test_structured_output_native():
 def test_history():
     agent = Agent(
         model=Gemini(id="gemini-1.5-flash"),
-        storage=SqliteAgentStorage(table_name="agent_sessions", db_file="tmp/agent_storage.db"),
+        storage=SqliteStorage(table_name="agent_sessions", db_file="tmp/agent_storage.db"),
         add_history_to_messages=True,
         telemetry=False,
         monitoring=False,
