@@ -4,14 +4,14 @@ from os import getenv
 from typing import Any, Dict, Iterator, List, Optional, Union
 
 import httpx
-from anthropic import BaseModel
+from pydantic import BaseModel
 
 from agno.exceptions import ModelProviderError
 from agno.models.base import Model
 from agno.models.message import Message
 from agno.models.response import ModelResponse
-from agno.utils.log import logger
-from agno.utils.openai import images_to_message
+from agno.utils.log import log_error
+from agno.utils.models.ai_foundry import format_message
 
 try:
     from azure.ai.inference import ChatCompletionsClient
@@ -30,41 +30,6 @@ except ImportError:
     raise ImportError(
         "`azure-ai-inference` not installed. Please install it via `pip install azure-ai-inference aiohttp`."
     )
-
-
-def _format_message(message: Message) -> Dict[str, Any]:
-    """
-    Format a message into the format expected by OpenAI.
-
-    Args:
-        message (Message): The message to format.
-
-    Returns:
-        Dict[str, Any]: The formatted message.
-    """
-    message_dict: Dict[str, Any] = {
-        "role": message.role,
-        "content": message.content,
-        "name": message.name,
-        "tool_call_id": message.tool_call_id,
-        "tool_calls": message.tool_calls,
-    }
-    message_dict = {k: v for k, v in message_dict.items() if v is not None}
-
-    if message.images is not None and len(message.images) > 0:
-        # Ignore non-string message content
-        # because we assume that the images/audio are already added to the message
-        if isinstance(message.content, str):
-            message_dict["content"] = [{"type": "text", "text": message.content}]
-            message_dict["content"].extend(images_to_message(images=message.images))
-
-    if message.audio is not None:
-        logger.warning("Audio input is currently unsupported.")
-
-    if message.videos is not None:
-        logger.warning("Video input is currently unsupported.")
-
-    return message_dict
 
 
 @dataclass
@@ -106,9 +71,6 @@ class AzureAIFoundry(Model):
     # Azure AI clients
     client: Optional[ChatCompletionsClient] = None
     async_client: Optional[AsyncChatCompletionsClient] = None
-
-    # Internal parameters
-    structured_outputs: bool = False
 
     def _get_request_kwargs(self) -> Dict[str, Any]:
         """Get the parameters for creating an Azure AI request."""
@@ -221,10 +183,10 @@ class AzureAIFoundry(Model):
         """
         try:
             return self.get_client().complete(
-                messages=[_format_message(m) for m in messages], **self._get_request_kwargs()
+                messages=[format_message(m) for m in messages], **self._get_request_kwargs()
             )
         except HttpResponseError as e:
-            logger.error(f"Azure AI API error: {e}")
+            log_error(f"Azure AI API error: {e}")
             raise ModelProviderError(
                 message=e.reason or "Azure AI API error",
                 status_code=e.status_code or 502,
@@ -232,7 +194,7 @@ class AzureAIFoundry(Model):
                 model_id=self.id,
             ) from e
         except Exception as e:
-            logger.error(f"Error from Azure AI API: {e}")
+            log_error(f"Error from Azure AI API: {e}")
             raise ModelProviderError(message=str(e), model_name=self.name, model_id=self.id) from e
 
     async def ainvoke(self, messages: List[Message]) -> Any:
@@ -249,11 +211,11 @@ class AzureAIFoundry(Model):
         try:
             async with self.get_async_client() as client:
                 return await client.complete(
-                    messages=[_format_message(m) for m in messages],
+                    messages=[format_message(m) for m in messages],
                     **self._get_request_kwargs(),
                 )
         except HttpResponseError as e:
-            logger.error(f"Azure AI API error: {e}")
+            log_error(f"Azure AI API error: {e}")
             raise ModelProviderError(
                 message=e.reason or "Azure AI API error",
                 status_code=e.status_code or 502,
@@ -261,7 +223,7 @@ class AzureAIFoundry(Model):
                 model_id=self.id,
             ) from e
         except Exception as e:
-            logger.error(f"Error from Azure AI API: {e}")
+            log_error(f"Error from Azure AI API: {e}")
             raise ModelProviderError(message=str(e), model_name=self.name, model_id=self.id) from e
 
     def invoke_stream(self, messages: List[Message]) -> Iterator[Any]:
@@ -276,10 +238,10 @@ class AzureAIFoundry(Model):
         """
         try:
             yield from self.get_client().complete(
-                messages=[_format_message(m) for m in messages], stream=True, **self._get_request_kwargs()
+                messages=[format_message(m) for m in messages], stream=True, **self._get_request_kwargs()
             )
         except HttpResponseError as e:
-            logger.error(f"Azure AI API error: {e}")
+            log_error(f"Azure AI API error: {e}")
             raise ModelProviderError(
                 message=e.reason or "Azure AI API error",
                 status_code=e.status_code or 502,
@@ -287,7 +249,7 @@ class AzureAIFoundry(Model):
                 model_id=self.id,
             ) from e
         except Exception as e:
-            logger.error(f"Error from Azure AI API: {e}")
+            log_error(f"Error from Azure AI API: {e}")
             raise ModelProviderError(message=str(e), model_name=self.name, model_id=self.id) from e
 
     async def ainvoke_stream(self, messages: List[Message]) -> AsyncIterator[Any]:
@@ -303,7 +265,7 @@ class AzureAIFoundry(Model):
         try:
             async with self.get_async_client() as client:
                 stream = await client.complete(
-                    messages=[_format_message(m) for m in messages],
+                    messages=[format_message(m) for m in messages],
                     stream=True,
                     **self._get_request_kwargs(),
                 )
@@ -311,7 +273,7 @@ class AzureAIFoundry(Model):
                     yield chunk
 
         except HttpResponseError as e:
-            logger.error(f"Azure AI API error: {e}")
+            log_error(f"Azure AI API error: {e}")
             raise ModelProviderError(
                 message=e.reason or "Azure AI API error",
                 status_code=e.status_code or 502,
@@ -319,7 +281,7 @@ class AzureAIFoundry(Model):
                 model_id=self.id,
             ) from e
         except Exception as e:
-            logger.error(f"Error from Azure AI API: {e}")
+            log_error(f"Error from Azure AI API: {e}")
             raise ModelProviderError(message=str(e), model_name=self.name, model_id=self.id) from e
 
     def parse_provider_response(self, response: ChatCompletions) -> ModelResponse:
@@ -369,7 +331,7 @@ class AzureAIFoundry(Model):
                 }
 
         except Exception as e:
-            logger.error(f"Error parsing Azure AI response: {e}")
+            log_error(f"Error parsing Azure AI response: {e}")
             raise ModelProviderError(message=str(e), model_name=self.name, model_id=self.id) from e
 
         return model_response
@@ -439,7 +401,7 @@ class AzureAIFoundry(Model):
                 }
 
         except Exception as e:
-            logger.error(f"Error parsing Azure AI response delta: {e}")
+            log_error(f"Error parsing Azure AI response delta: {e}")
             raise ModelProviderError(message=str(e), model_name=self.name, model_id=self.id) from e
 
         return model_response

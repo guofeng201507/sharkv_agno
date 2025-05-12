@@ -11,7 +11,7 @@ from agno.exceptions import ModelProviderError
 from agno.models.base import Model
 from agno.models.message import Message
 from agno.models.response import ModelResponse
-from agno.utils.log import logger
+from agno.utils.log import log_error, log_warning
 
 try:
     from huggingface_hub import (
@@ -24,7 +24,7 @@ try:
         InferenceClient,
     )
     from huggingface_hub.errors import InferenceTimeoutError
-except (ModuleNotFoundError, ImportError):
+except ImportError:
     raise ImportError("`huggingface_hub` not installed. Please install using `pip install huggingface_hub`")
 
 
@@ -33,33 +33,7 @@ class HuggingFace(Model):
     """
     A class for interacting with HuggingFace Hub Inference models.
 
-    Attributes:
-        id (str): The id of the HuggingFace model to use. Default is "meta-llama/Meta-Llama-3-8B-Instruct".
-        name (str): The name of this chat model instance. Default is "HuggingFace".
-        provider (str): The provider of the model. Default is "HuggingFace".
-        store (Optional[bool]): Whether or not to store the output of this chat completion request for use in the model distillation or evals products.
-        frequency_penalty (Optional[float]): Penalizes new tokens based on their frequency in the text so far.
-        logit_bias (Optional[Any]): Modifies the likelihood of specified tokens appearing in the completion.
-        logprobs (Optional[bool]): Include the log probabilities on the logprobs most likely tokens.
-        max_tokens (Optional[int]): The maximum number of tokens to generate in the chat completion.
-        presence_penalty (Optional[float]): Penalizes new tokens based on whether they appear in the text so far.
-        response_format (Optional[Any]): An object specifying the format that the model must output.
-        seed (Optional[int]): A seed for deterministic sampling.
-        stop (Optional[Union[str, List[str]]]): Up to 4 sequences where the API will stop generating further tokens.
-        temperature (Optional[float]): Controls randomness in the model's output.
-        top_logprobs (Optional[int]): How many log probability results to return per token.
-        top_p (Optional[float]): Controls diversity via nucleus sampling.
-        request_params (Optional[Dict[str, Any]]): Additional parameters to include in the request.
-        api_key (Optional[str]): The Access Token for authenticating with HuggingFace.
-        base_url (Optional[Union[str, httpx.URL]]): The base URL for API requests.
-        timeout (Optional[float]): The timeout for API requests.
-        max_retries (Optional[int]): The maximum number of retries for failed requests.
-        default_headers (Optional[Any]): Default headers to include in all requests.
-        default_query (Optional[Any]): Default query parameters to include in all requests.
-        http_client (Optional[httpx.Client]): An optional pre-configured HTTP client.
-        client_params (Optional[Dict[str, Any]]): Additional parameters for client configuration.
-        client (Optional[InferenceClient]): The HuggingFace Hub Inference client instance.
-        async_client (Optional[AsyncInferenceClient]): The asynchronous HuggingFace Hub client instance.
+    For more information, see: https://huggingface.co/docs/api-inference/index
     """
 
     id: str = "meta-llama/Meta-Llama-3-8B-Instruct"
@@ -97,7 +71,7 @@ class HuggingFace(Model):
     def get_client_params(self) -> Dict[str, Any]:
         self.api_key = self.api_key or getenv("HF_TOKEN")
         if not self.api_key:
-            logger.error("HF_TOKEN not set. Please set the HF_TOKEN environment variable.")
+            log_error("HF_TOKEN not set. Please set the HF_TOKEN environment variable.")
 
         _client_params: Dict[str, Any] = {}
         if self.api_key is not None:
@@ -239,6 +213,18 @@ class HuggingFace(Model):
         if message.tool_calls is None or len(message.tool_calls) == 0:
             message_dict["tool_calls"] = None
 
+        if message.audio is not None and len(message.audio) > 0:
+            log_warning("Audio input is currently unsupported.")
+
+        if message.files is not None and len(message.files) > 0:
+            log_warning("File input is currently unsupported.")
+
+        if message.images is not None and len(message.images) > 0:
+            log_warning("Image input is currently unsupported.")
+
+        if message.videos is not None and len(message.videos) > 0:
+            log_warning("Video input is currently unsupported.")
+
         return message_dict
 
     def invoke(self, messages: List[Message]) -> Union[ChatCompletionOutput]:
@@ -258,10 +244,10 @@ class HuggingFace(Model):
                 **self.request_kwargs,
             )
         except InferenceTimeoutError as e:
-            logger.error(f"Error invoking HuggingFace model: {e}")
+            log_error(f"Error invoking HuggingFace model: {e}")
             raise ModelProviderError(message=str(e), model_name=self.name, model_id=self.id) from e
         except Exception as e:
-            logger.error(f"Unexpected error invoking HuggingFace model: {e}")
+            log_error(f"Unexpected error invoking HuggingFace model: {e}")
             raise ModelProviderError(message=str(e), model_name=self.name, model_id=self.id) from e
 
     async def ainvoke(self, messages: List[Message]) -> Union[ChatCompletionOutput]:
@@ -282,10 +268,10 @@ class HuggingFace(Model):
                     **self.request_kwargs,
                 )
         except InferenceTimeoutError as e:
-            logger.error(f"Error invoking HuggingFace model: {e}")
+            log_error(f"Error invoking HuggingFace model: {e}")
             raise ModelProviderError(message=str(e), model_name=self.name, model_id=self.id) from e
         except Exception as e:
-            logger.error(f"Unexpected error invoking HuggingFace model: {e}")
+            log_error(f"Unexpected error invoking HuggingFace model: {e}")
             raise ModelProviderError(message=str(e), model_name=self.name, model_id=self.id) from e
 
     def invoke_stream(self, messages: List[Message]) -> Iterator[ChatCompletionStreamOutput]:
@@ -307,10 +293,10 @@ class HuggingFace(Model):
                 **self.request_kwargs,
             )  # type: ignore
         except InferenceTimeoutError as e:
-            logger.error(f"Error invoking HuggingFace model: {e}")
+            log_error(f"Error invoking HuggingFace model: {e}")
             raise ModelProviderError(message=str(e), model_name=self.name, model_id=self.id) from e
         except Exception as e:
-            logger.error(f"Unexpected error invoking HuggingFace model: {e}")
+            log_error(f"Unexpected error invoking HuggingFace model: {e}")
             raise ModelProviderError(message=str(e), model_name=self.name, model_id=self.id) from e
 
     async def ainvoke_stream(self, messages: List[Message]) -> AsyncIterator[Any]:
@@ -335,10 +321,10 @@ class HuggingFace(Model):
                 async for chunk in stream:
                     yield chunk
         except InferenceTimeoutError as e:
-            logger.error(f"Error invoking HuggingFace model: {e}")
+            log_error(f"Error invoking HuggingFace model: {e}")
             raise ModelProviderError(message=str(e), model_name=self.name, model_id=self.id) from e
         except Exception as e:
-            logger.error(f"Unexpected error invoking HuggingFace model: {e}")
+            log_error(f"Unexpected error invoking HuggingFace model: {e}")
             raise ModelProviderError(message=str(e), model_name=self.name, model_id=self.id) from e
 
     # Override base method
@@ -410,7 +396,7 @@ class HuggingFace(Model):
                 if parsed_object is not None:
                     model_response.parsed = parsed_object
         except Exception as e:
-            logger.warning(f"Error retrieving structured outputs: {e}")
+            log_warning(f"Error retrieving structured outputs: {e}")
 
         if response.usage is not None:
             model_response.response_usage = response.usage
